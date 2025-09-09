@@ -49,7 +49,7 @@
       .badge{ font-size: .80rem; padding: .40rem .65rem; gap: .45rem; }
       .controls{ top: 44px; }
       .control-group{ font-size: 12px; padding: 5px 9px; }
-      .progress{ width: min(92vw, 560px); padding: 5px 7px; bottom: 10px; }
+      .progress{ width: min(92vw, 400px); padding: 5px 7px; bottom: 10px; }
       .progress .bar{ height: 8px; }
       .progress .label{ font-size: .72rem; }
       .progress .label #pct{ font-size: .82em; font-weight: 700; }
@@ -93,13 +93,13 @@
   </div>
 
   <div class="hud">
-    <div class="badge">🎮 <b>Clique no estilingue</b>, <b>arraste para trás</b> e <b>solte</b> para disparar. • <b>R</b> reinicia</div>
-  </div>
-
-  <div class="controls">
-    <div class="control-group"><span id="angleDisplay">Ângulo: 0°</span></div>
-    <div class="control-group"><span id="powerDisplay">Força: 0%</span></div>
-    <div class="control-group"><span id="shotsDisplay">Disparos: 0</span></div>
+    <div class="badge">
+      <span id="angleDisplay">Ângulo: 0°</span>
+      <span>•</span>
+      <span id="powerDisplay">Força: 0%</span>
+      <span>•</span>
+      <span id="shotsDisplay">Disparos: 0</span>
+    </div>
   </div>
 
   <div class="progress" aria-live="polite">
@@ -140,17 +140,14 @@
     const isMobile = window.innerWidth <= 700;
     const titleEl = document.querySelector('.title');
     const hudEl = document.querySelector('.hud');
-    const controlsEl = document.querySelector('.controls');
-    if(!titleEl || !hudEl || !controlsEl) return;
+    if(!titleEl || !hudEl) return;
     if(isMobile){
       const rect = titleEl.getBoundingClientRect();
       const gap = 8; // espaçamento abaixo do título
       const hudTop = Math.ceil(rect.bottom + gap);
       hudEl.style.top = hudTop + 'px';
-      controlsEl.style.top = Math.ceil(hudTop + 28) + 'px';
     } else {
       hudEl.style.top = '';
-      controlsEl.style.top = '';
     }
   }
   adjustHudPositionsForMobile();
@@ -203,9 +200,9 @@
   function worldWidth(){ return canvas.width * 2; }
   function layout(){
     const W = canvas.width, H = canvas.height; const WW = worldWidth();
-    // Margens responsivas: desloca o estilingue mais para dentro
+    // Margens responsivas: desloca o estilingue ainda mais para dentro
     const leftMargin = Math.round(
-      Math.max(140*DPR, Math.min(W * 0.18, 280*DPR))
+      Math.max(160*DPR, Math.min(W * 0.35, 320*DPR))
     );
     const rightMargin = Math.round(
       Math.max(140*DPR, Math.min(W * 0.16, 260*DPR))
