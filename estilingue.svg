@@ -1,0 +1,52 @@
+# Create a very clear, clean Y-shaped slingshot body using thick stroke (no cords).
+svg_y_stroke = r'''<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 320" width="240" height="320" aria-label="Clean Y slingshot body (no cords)">
+  <defs>
+    <!-- wood stroke gradient -->
+    <linearGradient id="woodStroke" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"  stop-color="#d9a86a"/>
+      <stop offset="60%" stop-color="#a66a3a"/>
+      <stop offset="100%" stop-color="#744423"/>
+    </linearGradient>
+    <!-- subtle outline -->
+    <linearGradient id="edge" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"  stop-color="#000000" stop-opacity=".35"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="drop" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="2.2"/>
+      <feOffset dy="2"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.35"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- ground shadow -->
+  <ellipse cx="120" cy="306" rx="58" ry="10" fill="#000" opacity=".10"/>
+
+  <!-- Y path with thick round stroke to clearly form the slingshot -->
+  <g filter="url(#drop)" stroke-linecap="round" stroke-linejoin="round">
+    <!-- base -> junction -->
+    <path d="M120 284 L120 168" stroke="url(#woodStroke)" stroke-width="36"/>
+    <!-- left arm -->
+    <path d="M120 168 L65 68" stroke="url(#woodStroke)" stroke-width="36"/>
+    <!-- right arm -->
+    <path d="M120 168 L175 68" stroke="url(#woodStroke)" stroke-width="36"/>
+  </g>
+
+  <!-- simple leather wraps at the tips (no cords) -->
+  <g fill="#7a5a4a">
+    <rect x="52" y="58" width="26" height="14" rx="6"/>
+    <rect x="162" y="58" width="26" height="14" rx="6"/>
+  </g>
+
+  <!-- reference holes to attach your dynamic cords -->
+  <g fill="#3b2b24">
+    <circle cx="65" cy="68" r="3.2"/>
+    <circle cx="175" cy="68" r="3.2"/>
+  </g>
+</svg>
+'''
+with open('/mnt/data/slingshot_Y_clean.svg', 'w', encoding='utf-8') as f:
+    f.write(svg_y_stroke)
+print("SVG salvo em /mnt/data/slingshot_Y_clean.svg")

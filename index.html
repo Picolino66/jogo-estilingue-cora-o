@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Slingshot Hearts 💘</title>
+  <style>
+    :root{
+      --bg1:#c9f0ff; /* azul clarinho */
+      --bg2:#f8fbff;
+      --pink:#ff6aa2;
+      --red:#ff3b6b;
+      --rose:#ff7b9c;
+      --white:#fff;
+      --shadow:rgba(0,0,0,.18);
+    }
+    html,body{height:100%;}
+    body{ margin:0; font-family: ui-rounded, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; background: linear-gradient(180deg,var(--bg1),var(--bg2)); overflow:hidden; user-select:none; }
+    #wrap{position:fixed; inset:0; display:grid; place-items:center;}
+    canvas{ width: min(100vw, 1200px); height: min(100vh, 700px); box-shadow:0 10px 40px var(--shadow); border-radius:15px; border: 3px solid #e91e63; cursor: crosshair; background: linear-gradient(to bottom, #87CEEB, #FFE4E1); }
+
+    .title{ position: fixed; inset-inline: 0; top: 10px; display:flex; justify-content:center; pointer-events:none; }
+    .title h1{ color:#e91e63; margin:0; font-size:2.5em; text-shadow: 2px 2px 4px rgba(0,0,0,0.1); animation: pulse 2s ease-in-out infinite; font-weight:800; }
+    @keyframes pulse { 0%,100%{ transform: scale(1);} 50%{ transform: scale(1.05);} }
+
+    .hud{ position: fixed; inset-inline: 0; top:70px; display:flex; justify-content:center; pointer-events:none; }
+    .badge{ pointer-events:auto; display:flex; gap:.6rem; align-items:center; background:rgba(255,255,255,.85); backdrop-filter: blur(6px); box-shadow:0 6px 16px var(--shadow); border-radius:999px; padding:.5rem .9rem; font-size:.95rem; color:#333; }
+    .badge b{color:var(--red)}
+
+    .progress{ position: fixed; left:50%; transform:translateX(-50%); bottom: 18px; width: min(90vw, 760px); background: rgba(255,255,255,.9); border-radius: 12px; box-shadow: 0 8px 24px var(--shadow); padding: 10px 14px; }
+    .progress .bar{ height: 14px; background: #f1f5f9; border-radius: 999px; overflow:hidden; }
+    .progress .fill{ height:100%; width:0%; background: linear-gradient(90deg, var(--pink), var(--red)); transition: width .25s ease-out; }
+    .progress .label{ text-align:center; font-weight:600; margin-top:8px; color:#222 }
+
+    .toast{ position:fixed; top: 54px; right: 18px; background: rgba(255,255,255,.95); border-left:6px solid var(--pink); border-radius:10px; padding:.7rem .9rem; box-shadow:0 8px 24px var(--shadow); font-weight:600; }
+
+    .btn{ position:fixed; right:18px; bottom:18px; background: var(--pink); color:white; border:none; padding:.7rem 1rem; border-radius:12px; font-weight:700; box-shadow:0 8px 18px rgba(255,106,162,.4); cursor:pointer; }
+    .btn:active{ transform: translateY(1px); }
+
+    /* Controles estilo hearts-slingshot-game */
+    .controls{ position:fixed; inset-inline:0; top: 116px; display:flex; justify-content:center; gap:16px; flex-wrap:wrap; }
+    .control-group{ background: linear-gradient(135deg, #ff6b6b, #ff8e53); padding: 8px 14px; border-radius: 999px; color: white; font-weight: 700; box-shadow: 0 4px 15px rgba(0,0,0,0.2); font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="title"><h1>💕 Helena Roitman 💕</h1></div>
+  <div id="wrap">
+    <canvas id="game" width="1200" height="700" aria-label="Slingshot Hearts"></canvas>
+  </div>
+
+  <div class="hud">
+    <div class="badge">🎮 <b>Clique no estilingue</b>, <b>arraste para trás</b> e <b>solte</b> para disparar. • <b>R</b> reinicia</div>
+  </div>
+
+  <div class="controls">
+    <div class="control-group"><span id="angleDisplay">Ângulo: 0°</span></div>
+    <div class="control-group"><span id="powerDisplay">Força: 0%</span></div>
+    <div class="control-group"><span id="shotsDisplay">Disparos: 0</span></div>
+  </div>
+
+  <div class="progress" aria-live="polite">
+    <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Preenchimento do coração">
+      <div class="fill" id="fill"></div>
+    </div>
+    <div class="label"><span id="pct">0%</span> do coração preenchido</div>
+  </div>
+
+  <div class="toast" id="toast" hidden>💡 Dica: puxe o estilingue para a <b>esquerda/baixo</b> e solte para lançar à direita.</div>
+  <button class="btn" id="resetBtn" title="Reiniciar (R)">↻ Reiniciar</button>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const DPR = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+
+  // --- Layout responsive ---
+  function fitCanvas(){
+    const cssW = Math.min(window.innerWidth, 1200);
+    const cssH = Math.min(window.innerHeight, 700);
+    canvas.width = Math.round(cssW * DPR);
+    canvas.height = Math.round(cssH * DPR);
+  }
+  fitCanvas();
+  window.addEventListener('resize', fitCanvas);
+
+  // --- Simple sound synth (WebAudio) ---
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const audio = new AudioCtx();
+  let audioUnlocked = false;
+  function unlockAudio(){ if(!audioUnlocked){ const o=audio.createOscillator(); const g=audio.createGain(); o.connect(g); g.connect(audio.destination); g.gain.value=0; o.start(); setTimeout(()=>{o.stop();},5); audioUnlocked=true; } }
+
+  function beep(type='shoot'){
+    if(audio.state === 'suspended') audio.resume();
+    const o = audio.createOscillator();
+    const g = audio.createGain();
+    o.connect(g); g.connect(audio.destination);
+    const now = audio.currentTime;
+    let f1=660, f2=440, dur=.12;
+    if(type==='shoot'){ f1=720; f2=540; dur=.08; o.type='triangle'; }
+    if(type==='hit'){ f1=540; f2=880; dur=.18; o.type='sine'; }
+    if(type==='fill'){ f1=440; f2=660; dur=.35; o.type='sawtooth'; }
+    o.frequency.setValueAtTime(f1, now);
+    o.frequency.exponentialRampToValueAtTime(f2, now+dur);
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.12, now+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, now+dur);
+    o.start(now);
+    o.stop(now + dur + 0.02);
+  }
+
+  const rand = (a,b)=> a + Math.random()*(b-a);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+  const world = {
+    g: 1800,
+    ground: () => canvas.height - 40*DPR,
+  };
+
+  function worldWidth(){ return canvas.width * 2; }
+  function layout(){
+    const W = canvas.width, H = canvas.height; const WW = worldWidth();
+    const leftMargin = 90*DPR;
+    const rightMargin = 140*DPR;
+    const sling = { x: leftMargin, y: world.ground() - 120*DPR };
+    const baseSize = Math.min(canvas.width, canvas.height) * 0.18; // tamanho baseado na viewport, não no mundo
+    const target = { cx: WW - rightMargin, cy: H*0.50, size: baseSize };
+    return {sling, target};
+  }
+
+  function buildHeartPath(cx, cy, size){
+    const w = size, h = size * 0.9; const x = cx, y = cy; const p = new Path2D();
+    p.moveTo(x, y - h*0.25);
+    p.bezierCurveTo(x + w*0.5, y - h*0.95, x + w*0.95, y - h*0.05, x, y + h*0.55);
+    p.bezierCurveTo(x - w*0.95, y - h*0.05, x - w*0.5, y - h*0.95, x, y - h*0.25);
+    return p;
+  }
+  function drawHeart(ctx, cx, cy, size, fill, stroke, rot=0, shadow=false){
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot); ctx.translate(-cx,-cy);
+    const path = buildHeartPath(cx, cy, size);
+    if(shadow){ ctx.shadowColor = 'rgba(0,0,0,.18)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 6; }
+    ctx.fillStyle = fill; ctx.strokeStyle = stroke || 'rgba(0,0,0,.08)'; ctx.lineWidth = 3*DPR;
+    ctx.fill(path); ctx.stroke(path); ctx.restore();
+  }
+
+  // --- Game state ---
+  const state = {
+    projectiles: [], particles: [], fill: 0, fillShown: 0, targetPulse: 0,
+    aiming: false, dragging:false, shots: 0, won: false,
+    pocketX: 0, pocketY:0, // posição do "bolsinho" do estilingue ao mirar
+    wind: 0, windTarget: 0, // vento atual e alvo (suave)
+    camX: 0, camTargetX: 0, // câmera horizontal
+    returnTimer: 0,         // atraso para retornar ao estilingue
+    focusTimer: 0,          // tempo de foco no alvo
+    focusX: 0               // posição de câmera para focar o alvo
+  };
+
+  const cfg = {
+    hitFill: 0.20,          // 5 acertos para encher (5 x 20%)
+    airDrag: 0.0025,
+    maxPower: 3200,         // mais alcance/força no disparo
+    aimMaxDist: 240*DPR,    // quanto é possível puxar o estilingue
+    minShotRatio: 0.12,     // potência mínima (fração de aimMaxDist)
+    captureRadius: 60*DPR,  // clique precisa começar perto do estilingue
+    windAccel: 360,         // aceleração horizontal px/s^2 quando vento = 1 (mais perceptível)
+    windChangeEveryMs: 5000, // intervalo para variar o vento
+    camReturnDelay: 0.8,    // atraso (s) antes de voltar a câmera
+    camFollowLerp: 3.0,     // suavização ao seguir projétil
+    camReturnLerp: 1.2,     // suavização ao retornar
+    camFocusDuration: 1.2,  // tempo focando o alvo após acerto
+    camFocusLerp: 3.2       // suavização ao focar o alvo
+  };
+
+  const input = { down:false, x:0, y:0 };
+
+  // Atualiza HUD de estatísticas (ângulo, força, disparos)
+  function setAnglePowerDisplays(angleDeg, powerPct){
+    const ang = document.getElementById('angleDisplay');
+    const pow = document.getElementById('powerDisplay');
+    if(ang) ang.textContent = `Ângulo: ${Math.max(0, Math.round(Math.abs(angleDeg)))}°`;
+    if(pow) pow.textContent = `Força: ${Math.max(0, Math.min(100, Math.round(powerPct)))}%`;
+  }
+  function setShotsDisplay(){ const s=document.getElementById('shotsDisplay'); if(s) s.textContent = `Disparos: ${state.shots}`; }
+
+  canvas.addEventListener('pointerdown', (e)=>{
+    unlockAudio();
+    const r = canvas.getBoundingClientRect();
+    input.x = (e.clientX - r.left) * DPR; input.y = (e.clientY - r.top) * DPR;
+    const worldX = input.x + state.camX; const worldY = input.y;
+    const {sling} = layout();
+    const dist = Math.hypot(worldX - sling.x, worldY - sling.y);
+    if(dist <= cfg.captureRadius){
+      input.down = true; state.aiming = true; state.dragging = true;
+      state.pocketX = worldX; state.pocketY = worldY;
+      const a = getAim();
+      const angleDeg = a.launchAngle * 180/Math.PI;
+      const powerPct = a.ratio * 100;
+      setAnglePowerDisplays(angleDeg, powerPct);
+    } else {
+      showToast('Toque começando no estilingue para mirar.');
+    }
+  });
+
+  window.addEventListener('pointermove', (e)=>{
+    const r = canvas.getBoundingClientRect();
+    input.x = (e.clientX - r.left) * DPR; input.y = (e.clientY - r.top) * DPR;
+    if(state.dragging){
+      state.pocketX = input.x + state.camX; state.pocketY = input.y;
+      const a = getAim();
+      const angleDeg = a.launchAngle * 180/Math.PI;
+      const powerPct = a.ratio * 100;
+      setAnglePowerDisplays(angleDeg, powerPct);
+    }
+  });
+
+  window.addEventListener('pointerup', ()=>{
+    if(state.dragging){ shoot(); }
+    input.down=false; state.aiming=false; state.dragging=false;
+    // após soltar, não muda HUD; mantém último valor mostrado
+  });
+
+  window.addEventListener('keydown', (e)=>{ if(e.key==='r' || e.key==='R') reset(); });
+  document.getElementById('resetBtn').addEventListener('click', reset);
+
+  function reset(){
+    state.projectiles.length=0; state.particles.length=0; state.fill=0; state.fillShown=0; state.targetPulse=0; state.shots=0; state.won=false; showToast('Novo jogo iniciado. Boa sorte! 💖');
+    setShotsDisplay(); setAnglePowerDisplays(0,0);
+  }
+
+  function showToast(msg){ const t=document.getElementById('toast'); t.innerHTML=msg; t.hidden=false; clearTimeout(showToast._tmr); showToast._tmr=setTimeout(()=> t.hidden=true, 2600); }
+
+  // --- Cálculo de mira a partir do arrasto ---
+  function getAim(){
+    const {sling} = layout();
+    const dx = state.pocketX - sling.x; const dy = state.pocketY - sling.y;
+    const dist = Math.hypot(dx, dy);
+    const ratio = clamp(dist / cfg.aimMaxDist, 0, 1);
+    // direcao de lançamento é oposta ao arrasto
+    const launchAngle = Math.atan2(-dy, -dx);
+    // garante que o "bolsinho" não passe do limite visual
+    const k = dist > 0 ? Math.min(1, cfg.aimMaxDist / dist) : 0;
+    const pocketX = sling.x + dx * k;
+    const pocketY = sling.y + dy * k;
+    return {ratio, launchAngle, pocketX, pocketY, rawDist: dist, dx, dy};
+  }
+
+  function shoot(){
+    const {sling} = layout();
+    const a = getAim();
+    if(a.ratio < cfg.minShotRatio){ showToast('Puxe um pouco mais para ganhar força.'); return; }
+
+    const v = cfg.maxPower * a.ratio;
+    const vx = Math.cos(a.launchAngle) * v;
+    const vy = Math.sin(a.launchAngle) * v;
+    // só dispare se estiver indo para a direita (alvo está à direita)
+    if(vx <= 0){ showToast('Puxe para a esquerda/baixo para lançar para a direita.'); return; }
+
+    const p = { x: sling.x, y: sling.y, vx, vy, r: 18*DPR, life: 0, spin: rand(-2,2), trail: [], grounded: false, rest: 0, focusShown: false };
+    state.projectiles.push(p); state.shots++; setShotsDisplay(); beep('shoot');
+  }
+
+  // --- Física ---
+  function step(dt){
+    // aproxima o vento atual ao alvo, suavemente
+    state.wind += (state.windTarget - state.wind) * Math.min(1, dt * 0.6);
+    // câmera: segue projétil, foca o alvo no acerto e retorna suavemente após atraso
+    const viewW = canvas.width; const WW = worldWidth();
+    if(state.focusTimer > 0){
+      state.focusTimer -= dt;
+      state.camTargetX = clamp(state.focusX, 0, Math.max(0, WW - viewW));
+    } else if(state.projectiles.length > 0){
+      const p = state.projectiles[state.projectiles.length - 1];
+      const desired = clamp(p.x - viewW * 0.35, 0, Math.max(0, WW - viewW));
+      state.camTargetX = desired;
+      state.returnTimer = cfg.camReturnDelay; // reinicia delay enquanto houver projétil
+    } else {
+      if(state.returnTimer > 0){
+        state.returnTimer -= dt; // espera terminar o atraso
+        state.camTargetX = state.camX; // mantém visão atual
+      } else {
+        state.camTargetX = 0; // volta para o estilingue
+      }
+    }
+    const camLerp = (state.focusTimer > 0) ? cfg.camFocusLerp : ((state.projectiles.length > 0) ? cfg.camFollowLerp : cfg.camReturnLerp);
+    state.camX += (state.camTargetX - state.camX) * Math.min(1, dt * camLerp);
+    const {target} = layout();
+    for(let i=state.projectiles.length-1;i>=0;i--){
+      const p = state.projectiles[i];
+      p.life += dt;
+      p.vx *= (1 - cfg.airDrag); p.vy *= (1 - cfg.airDrag);
+      // vento influencia a velocidade horizontal
+      p.vx += state.wind * cfg.windAccel * dt;
+      p.vy += world.g * dt; p.x += p.vx * dt; p.y += p.vy * dt;
+      const gY = world.ground();
+      if(p.y + p.r > gY){ p.y = gY - p.r; p.vy *= -0.35; p.vx *= 0.7; p.grounded = true; spawnDust(p.x, gY); }
+      if(p.life > 0.05 && (p.life*100|0)%2===0){ p.trail.push({x:p.x,y:p.y, a:0.7}); if(p.trail.length>16) p.trail.shift(); }
+
+      const big = buildHeartPath(target.cx, target.cy, target.size);
+      const gateR = target.size*0.58;
+      if(Math.hypot(p.x-target.cx, p.y-target.cy) < gateR){
+        if(ctx.isPointInPath(big, p.x, p.y)){
+          impact(p.x,p.y);
+          // foca a câmera no alvo para mostrar a animação de preenchimento
+          state.focusX = Math.max(0, WW - viewW);
+          state.focusTimer = cfg.camFocusDuration;
+          state.returnTimer = cfg.camReturnDelay; // após focar, ainda espera antes de voltar
+          state.projectiles.splice(i,1);
+          state.fill = clamp(state.fill + cfg.hitFill, 0, 1);
+          state.targetPulse = 1.0; beep('hit');
+          if(state.fill>=1 && !state.won){ state.won=true; celebrate(); }
+          continue;
+        }
+      }
+      // mesmo errando, se passar perto do coração, foca rapidamente para mostrar o alvo
+      const distNear = Math.hypot(p.x-target.cx, p.y-target.cy);
+      if(!p.focusShown && distNear < gateR * 1.15 && !ctx.isPointInPath(big, p.x, p.y)){
+        state.focusX = Math.max(0, WW - viewW);
+        state.focusTimer = Math.max(state.focusTimer, 0.8);
+        p.focusShown = true;
+      }
+      // remove quando sair do mundo pela direita/esquerda ou cair bem abaixo da tela
+      if(p.x > worldWidth() + 200*DPR || p.x < -200*DPR || p.y > canvas.height + 400*DPR){ state.projectiles.splice(i,1); continue; }
+      // se ficar parado no chão por um tempo, remover
+      const speed = Math.hypot(p.vx, p.vy);
+      if(p.grounded){
+        if(speed < 30){ p.rest += dt; } else { p.rest = 0; }
+        if(p.rest > 1.0){ state.projectiles.splice(i,1); continue; }
+      }
+    }
+
+    for(let i=state.particles.length-1;i>=0;i--){ const q = state.particles[i]; q.vx *= 0.99; q.vy += world.g*0.4*dt; q.x += q.vx*dt; q.y += q.vy*dt; q.a -= dt*1.6; q.rot += q.sr*dt; if(q.a<=0) state.particles.splice(i,1); }
+
+    state.fillShown += (state.fill - state.fillShown) * Math.min(1, dt*6);
+    state.targetPulse *= Math.max(0, 1 - dt*3.5);
+  }
+
+  function impact(x,y){ for(let i=0;i<16;i++){ state.particles.push({ x, y, vx: rand(-220,220), vy: rand(-380, -80), a: 1, rot: rand(0,Math.PI*2), sr: rand(-6,6), size: rand(10,18)*DPR, type:'heart' }); } }
+  function spawnDust(x,y){ for(let i=0;i<6;i++){ state.particles.push({ x, y, vx: rand(-120,120), vy: rand(-220,-60), a: .6, rot:0, sr:0, size: rand(3,7)*DPR, type:'dust' }); } }
+
+  function celebrate(){
+    showToast(`Parabéns! Você encheu o coração em ${state.shots} disparos 🎉`);
+    beep('fill');
+    for(let i=0;i<120;i++){ state.particles.push({ x: canvas.width*rand(.15,.85), y: canvas.height*rand(.15,.6), vx: rand(-120,120), vy: rand(-220, -20), a: 1, rot: rand(0,Math.PI*2), sr: rand(-4,4), size: rand(8,20)*DPR, type:'heart' }); }
+  }
+
+  // --- Render ---
+  function draw(){
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0,0,W,H);
+
+    // desenha o mundo com translação de câmera
+    ctx.save();
+    ctx.translate(-state.camX, 0);
+
+    drawClouds();
+
+    // cenário como no hearts-slingshot-game: sem chão visível; céu via CSS do canvas
+
+    const {sling, target} = layout();
+
+    // linha tracejada de referência removida
+
+    // Coração base (vazio) semelhante ao hearts-slingshot-game
+    const pulseSize = target.size * (1 + state.targetPulse*0.06);
+    ctx.save();
+    ctx.lineWidth = 3*DPR;
+    ctx.strokeStyle = '#ff69b4';
+    drawHeart(ctx, target.cx, target.cy, pulseSize, 'rgba(255, 105, 180, 0.2)', '#ff69b4');
+    ctx.restore();
+
+    // Coração preenchido parcialmente conforme a porcentagem
+    drawHeartPartial(target.cx, target.cy, pulseSize, '#ff1493', clamp(state.fillShown, 0, 1));
+
+    drawSlingshot(sling.x, sling.y);
+
+    if(state.aiming && state.dragging){ drawAimPreview(sling.x, sling.y); }
+
+    for(const p of state.projectiles){ for(const t of p.trail){ ctx.globalAlpha = t.a; drawHeart(ctx, t.x, t.y, p.r*0.7, '#ffd6e3'); ctx.globalAlpha = 1; t.a *= 0.92; } drawHeart(ctx, p.x, p.y, p.r*1.2, '#ff6aa2', null, p.life*p.spin, true); }
+
+    for(const q of state.particles){ ctx.globalAlpha = Math.max(0, q.a); if(q.type==='heart') drawHeart(ctx, q.x, q.y, q.size, '#ff7fa4', null, q.rot); else { ctx.fillStyle = 'rgba(0,0,0,.1)'; ctx.beginPath(); ctx.arc(q.x, q.y, q.size, 0, Math.PI*2); ctx.fill(); } ctx.globalAlpha = 1; }
+
+    ctx.restore();
+
+    const pct = Math.round(state.fillShown*100); document.getElementById('fill').style.width = pct + '%'; document.getElementById('pct').textContent = pct + '%';
+
+    if(state.won){ ctx.save(); ctx.fillStyle='rgba(255,255,255,.85)'; ctx.strokeStyle='rgba(0,0,0,.08)'; ctx.lineWidth=2*DPR; const bw = Math.min(W*0.7, 760*DPR), bh = 120*DPR; ctx.beginPath(); roundRect(ctx, (W-bw)/2, H*0.12, bw, bh, 16*DPR); ctx.fill(); ctx.stroke(); ctx.fillStyle='#ff3b6b'; ctx.font = `${36*DPR}px/1.2 ui-rounded, system-ui, -apple-system, Segoe UI, Roboto`; ctx.textAlign='center'; ctx.fillText('Você encheu o coração! 💖', W/2, H*0.12 + 46*DPR); ctx.fillStyle='#333'; ctx.font = `${20*DPR}px/1.2 ui-rounded, system-ui`; ctx.fillText(`Disparos: ${state.shots}  •  Pressione R para jogar novamente`, W/2, H*0.12 + 84*DPR); ctx.restore(); }
+  }
+
+  function roundRect(ctx,x,y,w,h,r){ const k= r; ctx.moveTo(x+k,y); ctx.arcTo(x+w,y,x+w,y+h,k); ctx.arcTo(x+w,y+h,x,y+h,k); ctx.arcTo(x,y+h,x,y,k); ctx.arcTo(x,y,x+w,y,k); }
+
+  function drawSlingshot(x,y){
+    ctx.save();
+    ctx.lineWidth = 14*DPR; ctx.strokeStyle = '#b4743f'; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(x-26*DPR, y+80*DPR); ctx.lineTo(x-6*DPR, y-10*DPR); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x+26*DPR, y+80*DPR); ctx.lineTo(x+6*DPR, y-10*DPR); ctx.stroke();
+
+    const a = getAim();
+    const ax = state.aiming ? a.pocketX : x; const ay = state.aiming ? a.pocketY : y;
+    ctx.lineWidth = 6*DPR; ctx.strokeStyle = '#ff8fb3';
+    ctx.beginPath(); ctx.moveTo(x-6*DPR, y-10*DPR); ctx.lineTo(ax, ay); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x+6*DPR, y-10*DPR); ctx.lineTo(ax, ay); ctx.stroke();
+    ctx.fillStyle = '#333'; ctx.beginPath(); ctx.ellipse(ax, ay, 12*DPR, 8*DPR, 0, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  // Desenha o coração com preenchimento parcial (estilo hearts-slingshot-game)
+  function drawHeartPartial(cx, cy, size, color, fillPercent){
+    fillPercent = clamp(fillPercent, 0, 1);
+    const path = buildHeartPath(cx, cy, size);
+    ctx.save();
+    // recorta para o formato do coração
+    ctx.clip(path);
+    // borda sutil do preenchimento
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3*DPR;
+    ctx.stroke(path);
+    // preencher de baixo para cima conforme a porcentagem
+    const heartH = size * 0.9;
+    const fillH = heartH * fillPercent;
+    const top = cy + heartH * 0.55 - fillH;
+    ctx.fillStyle = color;
+    ctx.fillRect(cx - size, top, size * 2, Math.max(0, fillH));
+    ctx.restore();
+  }
+  function drawAimPreview(sx,sy){
+    const a = getAim();
+    const v = cfg.maxPower * a.ratio;
+    let vx = Math.cos(a.launchAngle)*v; let vy = Math.sin(a.launchAngle)*v;
+    if(vx <= 0) return; // não mostra se apontando para a esquerda
+    let x=sx, y=sy;
+    ctx.save();
+    const step = 0.08;           // passo de simulação
+    const previewT = 0.9;        // ~50% do horizonte original (1.8s)
+    const alphaMax = 0.8;        // começa visível e some até 0
+    for(let t=0; t<previewT; t+=step){
+      vx = vx*(1 - cfg.airDrag) + state.wind * cfg.windAccel * step;
+      vy = vy*(1 - cfg.airDrag) + world.g * step;
+      x += vx*step; y += vy*step;
+      const fade = Math.max(0, 1 - (t/previewT));
+      ctx.globalAlpha = alphaMax * fade;
+      drawHeart(ctx, x, y, 10*DPR, '#ffc1d3');
+    }
+    ctx.globalAlpha = 1; ctx.restore();
+  }
+
+  function drawClouds(){
+    const WW = worldWidth(), H = canvas.height;
+    // Igual ao hearts-slingshot-game, mas cobrindo toda a largura do mundo
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    const count = Math.max(6, Math.ceil(WW / (220*DPR)) + 2);
+    for (let i = 0; i < count; i++) {
+      const base = (Date.now() / 50);
+      const x = (base + i * 200) % (WW + 100) - 50;
+      const y = 50 + (i % 5) * 40;
+      ctx.beginPath();
+      ctx.arc(x, y, 30*DPR, 0, Math.PI * 2);
+      ctx.arc(x + 25*DPR, y, 35*DPR, 0, Math.PI * 2);
+      ctx.arc(x + 50*DPR, y, 30*DPR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  let last = performance.now();
+  function loop(now){ const dt = Math.min(1/30, (now - last)/1000); last = now; step(dt); draw(); requestAnimationFrame(loop); }
+  requestAnimationFrame(loop);
+
+  setTimeout(()=>{ showToast('Arraste o estilingue e solte para atirar 💘'); }, 700);
+  // sistema de vento: varia a cada intervalo e interpola suavemente
+  state.windTarget = rand(-1,1);
+  setInterval(()=>{ state.windTarget = rand(-1,1); }, cfg.windChangeEveryMs);
+})();
+</script>
+</body>
+</html>
