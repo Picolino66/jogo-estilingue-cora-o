@@ -3,7 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Slingshot Hearts 💘</title>
+  <title>Mucho Amor</title>
+  <link rel="icon" href="logo.svg" type="image/svg+xml" />
+  <link id="favicon32" rel="icon" sizes="32x32" href="logo.svg" />
+  <link id="appleIcon" rel="apple-touch-icon" href="logo.svg" />
+  <link rel="mask-icon" href="logo.svg" color="#e91e63" />
   <style>
     :root{
       --bg1:#c9f0ff; /* azul clarinho */
@@ -37,6 +41,23 @@
     .btn{ position:fixed; right:18px; bottom:18px; background: var(--pink); color:white; border:none; padding:.7rem 1rem; border-radius:12px; font-weight:700; box-shadow:0 8px 18px rgba(255,106,162,.4); cursor:pointer; }
     .btn:active{ transform: translateY(1px); }
     .btn-secondary{ left:18px; right:auto; }
+
+    /* Vencedor: overlay acima de tudo */
+    .win-overlay{ position:fixed; inset-inline:0; top:12%; display:flex; justify-content:center; z-index:9999; }
+    #winOverlay[hidden]{ display:none !important; }
+    .win-overlay .card{ background: rgba(255,255,255,.92); backdrop-filter: blur(6px); border-left:6px solid var(--pink); border-radius:16px; padding: .9rem 1.2rem; box-shadow:0 10px 30px var(--shadow); text-align:center; }
+    .win-overlay .win-title{ font-weight:800; color:#ff3b6b; font-size: clamp(18px, 3.4vw, 32px); text-shadow:none; animation:none; position:static; }
+    .win-overlay .win-subtitle{ color:#333; font-weight:600; font-size: clamp(12px, 2.2vw, 18px); }
+
+    /* Overlay de vídeo de presente */
+    .video-overlay{ position:fixed; inset:0; background: rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; z-index:10000; padding: 16px; opacity:0; visibility:hidden; pointer-events:none; transition: opacity .6s ease, visibility 0s linear .6s; }
+    .video-overlay.show{ opacity:1; visibility:visible; pointer-events:auto; transition: opacity .6s ease, visibility 0s; }
+    #videoOverlay[hidden]{ display:none !important; }
+    .video-wrap{ position:relative; width: min(96vw, 900px); max-height: 90vh; display:flex; flex-direction:column; gap:10px; }
+    .video-title{ color:#fff; font-weight:800; text-align:center; font-size: clamp(18px, 4vw, 36px); text-shadow: 0 2px 8px rgba(0,0,0,.5); }
+    .video-wrap video{ width: 100%; max-height: 80vh; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.35); background:#000; }
+    .video-close{ position:absolute; top:-10px; right:-10px; background: rgba(0,0,0,.65); color:#fff; border:none; width:36px; height:36px; border-radius:999px; cursor:pointer; font-weight:800; box-shadow:0 6px 18px rgba(0,0,0,.35); }
+    .video-close:active{ transform: translateY(1px); }
 
     /* Controles estilo hearts-slingshot-game */
     .controls{ position:fixed; inset-inline:0; top: 116px; display:flex; justify-content:center; gap:16px; flex-wrap:wrap; }
@@ -113,8 +134,49 @@
   <button class="btn" id="resetBtn" title="Reiniciar (R)">↻ Reiniciar</button>
   <button class="btn btn-secondary" id="fsBtn" title="Tela cheia">⤢ Tela cheia</button>
 
-<script>
-(() => {
+  <!-- Overlay de vitória -->
+  <div id="winOverlay" class="win-overlay" hidden>
+    <div class="card">
+      <div class="win-title">Você encheu o coração! 💖</div>
+      <div class="win-subtitle" id="winShots"></div>
+    </div>
+  </div>
+
+  <!-- Overlay de vídeo do presente -->
+  <div id="videoOverlay" class="video-overlay" hidden>
+    <div class="video-wrap">
+      <button id="videoClose" class="video-close" aria-label="Fechar vídeo">✕</button>
+      <div class="video-title">Pode abrir o presente 💖</div>
+      <video id="giftVideo" src="video.mp4" playsinline controls preload="metadata"></video>
+    </div>
+  </div>
+
+  <script>
+  (() => {
+  // Gera favicon PNG e apple-touch-icon a partir do SVG
+  function setIconsFromSVG(){
+    const src = 'logo.svg';
+    const img = new Image();
+    img.onload = () => {
+      const makeIcon = (size)=>{
+        const c = document.createElement('canvas'); c.width = size; c.height = size; const x = c.getContext('2d');
+        x.clearRect(0,0,size,size);
+        // desenha com contain e centralizado
+        const scale = Math.min(size / img.width, size / img.height);
+        const w = img.width * scale, h = img.height * scale;
+        const dx = (size - w) / 2, dy = (size - h) / 2;
+        x.drawImage(img, dx, dy, w, h);
+        return c.toDataURL('image/png');
+      };
+      const fav32 = document.getElementById('favicon32') || document.createElement('link');
+      fav32.id = 'favicon32'; fav32.rel = 'icon'; fav32.sizes = '32x32'; fav32.type = 'image/png'; fav32.href = makeIcon(32); document.head.appendChild(fav32);
+      const apple = document.getElementById('appleIcon') || document.createElement('link');
+      apple.id = 'appleIcon'; apple.rel = 'apple-touch-icon'; apple.sizes = '180x180'; apple.href = makeIcon(180); document.head.appendChild(apple);
+    };
+    img.src = src;
+  }
+  setIconsFromSVG();
+  
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   const DPR = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
@@ -234,6 +296,9 @@
     aiming: false, dragging:false, shots: 0, won: false,
     pocketX: 0, pocketY:0, // posição do "bolsinho" do estilingue ao mirar
     wind: 0, windTarget: 0, // vento atual e alvo (suave)
+    windDir: 1,             // direção do vento (+1 direita, -1 esquerda)
+    windBaseFactor: 1.0,    // fator base 0.8..1.2 para efeito de potência
+    cloudOffset: 0,         // deslocamento cumulativo das nuvens
     camX: 0, camTargetX: 0, // câmera horizontal
     returnTimer: 0,         // atraso para retornar ao estilingue
     focusTimer: 0,          // tempo de foco no alvo
@@ -247,8 +312,10 @@
     aimMaxDist: 240*DPR,    // quanto é possível puxar o estilingue
     minShotRatio: 0.12,     // potência mínima (fração de aimMaxDist)
     captureRadius: 60*DPR,  // clique precisa começar perto do estilingue
-    windAccel: 360,         // aceleração horizontal px/s^2 quando vento = 1 (mais perceptível)
-    windChangeEveryMs: 5000, // intervalo para variar o vento
+    windAccelMax: 720,      // aceleração horizontal px/s^2 quando vento = 1 (alto)
+    windChangeEveryMs: 3000, // intervalo para variar o vento (3s)
+    cloudBaseSpeed: 20,     // px/s base das nuvens
+    cloudWindMax: 60,       // px/s adicionais com vento = 1
     camReturnDelay: 0.8,    // atraso (s) antes de voltar a câmera
     camFollowLerp: 8.0,     // suavização ao seguir projétil (mais rápida)
     camReturnLerp: 1.4,     // suavização ao retornar
@@ -343,9 +410,31 @@
   document.addEventListener('fullscreenchange', updateFsBtn);
   updateFsBtn();
 
+  // Fecha o vídeo do presente com fade-out
+  function closeVideoOverlay(){
+    const vWrap = document.getElementById('videoOverlay');
+    const video = document.getElementById('giftVideo');
+    if(vWrap){
+      vWrap.classList.remove('show');
+      const onEnd = ()=>{ vWrap.hidden = true; vWrap.removeEventListener('transitionend', onEnd); };
+      vWrap.addEventListener('transitionend', onEnd);
+    }
+    if(video){ try{ video.pause(); }catch{} }
+  }
+  const videoClose = document.getElementById('videoClose');
+  if(videoClose){ videoClose.addEventListener('click', closeVideoOverlay); }
+  const videoOverlay = document.getElementById('videoOverlay');
+  if(videoOverlay){
+    videoOverlay.addEventListener('click', (e)=>{ if(e.target === videoOverlay) closeVideoOverlay(); });
+  }
+
   function reset(){
     state.projectiles.length=0; state.particles.length=0; state.fill=0; state.fillShown=0; state.targetPulse=0; state.shots=0; state.won=false; showToast('Novo jogo iniciado. Boa sorte! 💖');
     setShotsDisplay(); setAnglePowerDisplays(0,0);
+    const w = document.getElementById('winOverlay'); if(w) w.hidden = true;
+    const vWrap = document.getElementById('videoOverlay'); const video = document.getElementById('giftVideo');
+    if(vWrap){ vWrap.hidden = true; }
+    if(video){ try{ video.pause(); }catch{} }
   }
 
   function showToast(msg){ const t=document.getElementById('toast'); t.innerHTML=msg; t.hidden=false; clearTimeout(showToast._tmr); showToast._tmr=setTimeout(()=> t.hidden=true, 2600); }
@@ -371,10 +460,15 @@
     if(a.ratio < cfg.minShotRatio){ showToast('Puxe um pouco mais para ganhar força.'); return; }
 
     const v = cfg.maxPower * a.ratio;
-    const vx = Math.cos(a.launchAngle) * v;
+    let vx = Math.cos(a.launchAngle) * v;
     const vy = Math.sin(a.launchAngle) * v;
     // só dispare se estiver indo para a direita (alvo está à direita)
     if(vx <= 0){ showToast('Puxe para a esquerda/baixo para lançar para a direita.'); return; }
+
+    // Aplica efeito do vento no lançamento: até -20% (contra) ou +20% (a favor)
+    const base = state.windBaseFactor || 1.0; // 0.8,0.9,1.0,1.1,1.2
+    const launchFactor = (state.windDir > 0) ? Math.max(base, 1.0) : Math.min(base, 1.0);
+    vx *= launchFactor;
 
     const p = { x: sling.x, y: sling.y, vx, vy, r: 18*DPR, life: 0, spin: rand(-2,2), trail: [], grounded: false, rest: 0, focusShown: false };
     state.projectiles.push(p); state.shots++; setShotsDisplay(); beep('shoot');
@@ -382,8 +476,13 @@
 
   // --- Física ---
   function step(dt){
-    // aproxima o vento atual ao alvo, suavemente
-    state.wind += (state.windTarget - state.wind) * Math.min(1, dt * 0.6);
+    // aproxima o vento atual ao alvo, suavemente (mais rápido para intervalos de 3s)
+    state.wind += (state.windTarget - state.wind) * Math.min(1, dt * 1.6);
+    // deslocamento das nuvens de acordo com o vento
+    const cloudCycle = worldWidth() + 100;
+    const cloudSpeed = cfg.cloudBaseSpeed + state.wind * cfg.cloudWindMax; // px/s
+    state.cloudOffset = (state.cloudOffset + cloudSpeed * dt) % cloudCycle;
+    if(state.cloudOffset < 0) state.cloudOffset += cloudCycle;
     // câmera: segue projétil, foca o alvo no acerto e retorna suavemente após atraso
     const viewW = canvas.width; const WW = worldWidth();
     if(state.focusTimer > 0){
@@ -416,8 +515,8 @@
       const p = state.projectiles[i];
       p.life += dt;
       p.vx *= (1 - cfg.airDrag); p.vy *= (1 - cfg.airDrag);
-      // vento influencia a velocidade horizontal
-      p.vx += state.wind * cfg.windAccel * dt;
+      // vento influencia a velocidade horizontal (aceleração contínua)
+      p.vx += state.wind * cfg.windAccelMax * dt;
       p.vy += world.g * dt; p.x += p.vx * dt; p.y += p.vy * dt;
       const gY = world.ground();
       if(p.y + p.r > gY){ p.y = gY - p.r; p.vy *= -0.35; p.vx *= 0.7; p.grounded = true; spawnDust(p.x, gY); }
@@ -473,6 +572,24 @@
     showToast(`Parabéns! Você encheu o coração em ${state.shots} disparos 🎉`);
     beep('fill');
     for(let i=0;i<120;i++){ state.particles.push({ x: canvas.width*rand(.15,.85), y: canvas.height*rand(.15,.6), vx: rand(-120,120), vy: rand(-220, -20), a: 1, rot: rand(0,Math.PI*2), sr: rand(-4,4), size: rand(8,20)*DPR, type:'heart' }); }
+    // Exibe vídeo do presente com título
+    const w = document.getElementById('winOverlay'); if(w) w.hidden = true;
+    const vWrap = document.getElementById('videoOverlay');
+    const video = document.getElementById('giftVideo');
+    if(vWrap && video){
+      vWrap.hidden = false;
+      // ativa fade-in
+      vWrap.classList.remove('show');
+      requestAnimationFrame(()=>{ requestAnimationFrame(()=>{ vWrap.classList.add('show'); }); });
+      try{ video.currentTime = 0; }catch{}
+      const playAttempt = video.play();
+      if(playAttempt && typeof playAttempt.catch === 'function'){
+        playAttempt.catch(()=>{
+          showToast('Toque para iniciar o vídeo');
+          video.addEventListener('click', function onClick(){ video.play().catch(()=>{}); video.removeEventListener('click', onClick); }, { once:true });
+        });
+      }
+    }
   }
 
   // --- Render ---
@@ -515,7 +632,7 @@
 
     const pct = Math.round(state.fillShown*100); document.getElementById('fill').style.width = pct + '%'; document.getElementById('pct').textContent = pct + '%';
 
-    if(state.won){ ctx.save(); ctx.fillStyle='rgba(255,255,255,.85)'; ctx.strokeStyle='rgba(0,0,0,.08)'; ctx.lineWidth=2*DPR; const bw = Math.min(W*0.7, 760*DPR), bh = 120*DPR; ctx.beginPath(); roundRect(ctx, (W-bw)/2, H*0.12, bw, bh, 16*DPR); ctx.fill(); ctx.stroke(); ctx.fillStyle='#ff3b6b'; ctx.font = `${36*DPR}px/1.2 ui-rounded, system-ui, -apple-system, Segoe UI, Roboto`; ctx.textAlign='center'; ctx.fillText('Você encheu o coração! 💖', W/2, H*0.12 + 46*DPR); ctx.fillStyle='#333'; ctx.font = `${20*DPR}px/1.2 ui-rounded, system-ui`; ctx.fillText(`Disparos: ${state.shots}  •  Pressione R para jogar novamente`, W/2, H*0.12 + 84*DPR); ctx.restore(); }
+    // Mensagem de vitória agora é DOM overlay (winOverlay)
   }
 
   function roundRect(ctx,x,y,w,h,r){ const k= r; ctx.moveTo(x+k,y); ctx.arcTo(x+w,y,x+w,y+h,k); ctx.arcTo(x+w,y+h,x,y+h,k); ctx.arcTo(x,y+h,x,y,k); ctx.arcTo(x,y,x+w,y,k); }
@@ -589,7 +706,7 @@
     const previewT = 0.9;        // ~50% do horizonte original (1.8s)
     const alphaMax = 0.8;        // começa visível e some até 0
     for(let t=0; t<previewT; t+=step){
-      vx = vx*(1 - cfg.airDrag) + state.wind * cfg.windAccel * step;
+      vx = vx*(1 - cfg.airDrag) + state.wind * cfg.windAccelMax * step;
       vy = vy*(1 - cfg.airDrag) + world.g * step;
       x += vx*step; y += vy*step;
       const fade = Math.max(0, 1 - (t/previewT));
@@ -605,7 +722,7 @@
     ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
     const count = Math.max(6, Math.ceil(WW / (220*DPR)) + 2);
     for (let i = 0; i < count; i++) {
-      const base = (Date.now() / 50);
+      const base = state.cloudOffset;
       const x = (base + i * 200) % (WW + 100) - 50;
       const y = 50 + (i % 5) * 40;
       ctx.beginPath();
@@ -621,9 +738,19 @@
   requestAnimationFrame(loop);
 
   setTimeout(()=>{ showToast('Arraste o estilingue e solte para atirar 💘'); }, 700);
-  // sistema de vento: varia a cada intervalo e interpola suavemente
-  state.windTarget = rand(-1,1);
-  setInterval(()=>{ state.windTarget = rand(-1,1); }, cfg.windChangeEveryMs);
+  // sistema de vento: direção ± e força variando entre fatores 0.8..1.2 a cada 3s
+  const WIND_FACTORS = [0.8, 0.9, 1.0, 1.1, 1.2];
+  function pickWind(){
+    const dir = Math.random() < 0.5 ? -1 : 1; // esquerda/direita
+    const baseFactor = WIND_FACTORS[(Math.random() * WIND_FACTORS.length) | 0];
+    state.windDir = dir;
+    state.windBaseFactor = baseFactor;
+    // converte fator em alvo de intensidade normalizado (0, 0.5, 1.0)
+    const mag = Math.min(1, Math.abs(baseFactor - 1) / 0.2);
+    state.windTarget = dir * mag;
+  }
+  pickWind();
+  setInterval(pickWind, cfg.windChangeEveryMs);
 })();
 </script>
 </body>
